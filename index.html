@@ -8,45 +8,68 @@
   <style>
     :root { --w: 420px; --radius: 16px; }
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-           display: flex; justify-content: center; padding: 16px; background: #0f1115; color: #eaeef5; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      display: flex; justify-content: center; padding: 16px; background: #0f1115; color: #eaeef5;
+    }
     #app { width: min(100%, var(--w)); }
     header { margin-bottom: 10px; }
     h1 { font-size: 18px; margin: 0 0 4px; }
     .muted { opacity: .75; margin: 0; font-size: 12px; }
 
-    #banner { position: fixed; top: 0; left: 0; right: 0; padding: 10px 14px;
-      background: #2b132a; color: #ffd3e6; border-bottom: 1px solid #6a2a67; font-size: 14px; z-index: 9999; }
+    #banner {
+      position: fixed; top: 0; left: 0; right: 0; padding: 10px 14px;
+      background: #2b132a; color: #ffd3e6; border-bottom: 1px solid #6a2a67; font-size: 14px; z-index: 9999;
+    }
     #banner.hidden { display: none; }
 
-    #unmute { position: fixed; right: 12px; bottom: 12px; z-index: 10000;
+    #unmute {
+      position: fixed; right: 12px; bottom: 12px; z-index: 10000;
       padding: 10px 14px; border-radius: 10px; border: 1px solid #2a2f3a;
-      background: #151a28; color: #eaeef5; cursor: pointer; display: none; }
+      background: #151a28; color: #eaeef5; cursor: pointer; display: none;
+    }
 
     /* Portrait stage */
-    #stage { width: 100%; aspect-ratio: 9/16; position: relative; overflow: hidden; border-radius: var(--radius);
-      background: #1b1f2a center/cover no-repeat; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+    #stage {
+      width: 100%; aspect-ratio: 9/16; position: relative; overflow: hidden; border-radius: var(--radius);
+      background: #1b1f2a center/cover no-repeat; box-shadow: 0 8px 30px rgba(0,0,0,.35);
+    }
 
-    /* Avatar rendering layers */
-    #avatarVideo { position: absolute; inset: 0; opacity: 0; /* audio only; video drawn to canvas */ }
-    #avatarCanvas { position: absolute; inset: 0; display: block; }
+    /* Avatar layers */
+    #avatarVideo, #avatarCanvas {
+      position: absolute; inset: 0;
+      z-index: 1;
+      transition: transform .3s ease;
+    }
+    #avatarVideo { opacity: 0; } /* audio only; we draw video to canvas */
+    /* Shrink avatar a bit when video shows so face isn’t covered */
+    #stage.min #avatarCanvas, #stage.min #avatarVideo {
+      transform: scale(.86) translateY(8%);
+      transform-origin: center bottom;
+    }
 
-    /* In-frame overlay for module video (inside the portrait) */
-    #stageOverlay { position: absolute; left: 3%; right: 3%; top: 3%; aspect-ratio: 16/9;
-      border-radius: 12px; overflow: hidden; background: #000; box-shadow: 0 6px 18px rgba(0,0,0,.35); display: none; }
+    /* In-frame overlay (module video INSIDE portrait) */
+    #stageOverlay {
+      position: absolute; left: 3%; right: 3%; top: 3%;
+      aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; background: #000;
+      box-shadow: 0 6px 18px rgba(0,0,0,.35); display: none; z-index: 2;
+    }
     #stageOverlay iframe, #stageOverlay video { width: 100%; height: 100%; border: 0; display: block; }
     #overlayBar { position: absolute; right: 6px; top: 6px; z-index: 3; display: flex; gap: 6px; }
-    #overlayBar button { padding: 6px 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; border-radius: 8px; cursor: pointer; }
+    #overlayBar button {
+      padding: 6px 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; border-radius: 8px; cursor: pointer;
+    }
 
-    /* Module menu */
+    /* Menu & input */
     #menu { margin-top: 10px; background: #0f1320; border: 1px solid #2a2f3a; padding: 10px; border-radius: 12px; }
     #menu.hidden { display: none; }
     #menu p { margin: 0 0 8px; font-size: 13px; opacity: .85; }
-    #menu button { display: block; width: 100%; text-align: left; margin: 6px 0; padding: 10px; border-radius: 10px;
-      border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer; }
+    #menu button {
+      display: block; width: 100%; text-align: left; margin: 6px 0; padding: 10px; border-radius: 10px;
+      border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer;
+    }
     #menu button:hover { background: #1c2336; }
 
-    /* Input */
     form { display: flex; gap: 8px; margin-top: 10px; }
     input { flex: 1; padding: 10px; border: 1px solid #2a2f3a; border-radius: 10px; background: #0f1320; color: #eaeef5; }
     button { padding: 10px 12px; border-radius: 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer; }
@@ -64,14 +87,17 @@
     </header>
 
     <div id="stage">
-      <!-- University background is applied to #stage via CSS background-image -->
+      <!-- University background is applied here via CSS background-image -->
       <video id="avatarVideo" playsinline autoplay muted></video>
       <canvas id="avatarCanvas"></canvas>
 
-      <!-- In-frame overlay (video lives INSIDE the portrait) -->
+      <!-- Module video inside portrait -->
       <div id="stageOverlay">
         <div id="overlayBar"><button id="closeOverlay">Close</button></div>
-        <iframe id="overlayFrame" allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+        <iframe id="overlayFrame"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          referrerpolicy="origin-when-cross-origin">
+        </iframe>
       </div>
     </div>
 
@@ -82,7 +108,7 @@
     </div>
 
     <form id="ask">
-      <input id="text" placeholder="Say or type: 'I'm Alex from Stanford University' or 'Module 1'..." />
+      <input id="text" placeholder="Say or type: “I'm Alex from Stanford University” or “Module 1”..." />
       <button type="submit">Send</button>
     </form>
   </div>
