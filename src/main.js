@@ -1,4 +1,4 @@
-import { StreamingAvatar, StreamingEvents, TaskType, AvatarQuality } from "@heygen/streaming-avatar";
+import StreamingAvatar, { StreamingEvents, TaskType, AvatarQuality } from "@heygen/streaming-avatar";
 
 const banner = document.getElementById("banner");
 const unmuteBtn = document.getElementById("unmute");
