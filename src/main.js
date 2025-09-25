@@ -3,9 +3,9 @@ import StreamingAvatar, { StreamingEvents, TaskType, AvatarQuality } from "@heyg
 const banner = document.getElementById("banner");
 const unmuteBtn = document.getElementById("unmute");
 const stageEl = document.getElementById("stage");
-const avatarVideo = document.getElementById("avatarVideo");   // audio source
-const avatarCanvas = document.getElementById("avatarCanvas"); // visual (with chroma key)
-const overlay = document.getElementById("stageOverlay");
+const avatarVideo = document.getElementById("avatarVideo");   // audio source (hidden)
+const avatarCanvas = document.getElementById("avatarCanvas"); // visual with chroma key
+const overlay = document.getElementById("stageOverlay");      // in-frame video area
 const overlayFrame = document.getElementById("overlayFrame");
 const closeOverlayBtn = document.getElementById("closeOverlay");
 const menuEl = document.getElementById("menu");
@@ -24,7 +24,7 @@ async function getToken(){
 
 function titleCase(s){ return s.replace(/\b\w/g, ch => ch.toUpperCase()); }
 
-// University backgrounds
+// -------------------- University backgrounds --------------------
 const UNI_BG = {
   "oxford":"https://source.unsplash.com/1080x1920/?oxford,university",
   "oxford university":"https://source.unsplash.com/1080x1920/?oxford,university",
@@ -36,7 +36,7 @@ const UNI_BG = {
   "stanford university":"https://images.unsplash.com/photo-1508175554791-0da3b70a5a53?q=80&w=1080&auto=format&fit=crop"
 };
 function detectUniversity(text){
-  const q = text.toLowerCase();
+  const q = (text||"").toLowerCase();
   return Object.keys(UNI_BG).find(k => q.includes(k)) || null;
 }
 function applyUniversityBg(key){
@@ -44,30 +44,90 @@ function applyUniversityBg(key){
   stageEl.style.backgroundImage = `url(${UNI_BG[key]})`;
 }
 
-// Module config
+// -------------------- Modules + FUZZY matching --------------------
 const SYNTHESIA_ID = "dd552b45-bf27-48c4-96a6-77a2d59e63e7";
 const MODULES = {
-  "module 1": {
-    type: "embed",
-    // Embed inside portrait. Autoplay must be muted due to browser policy.
-    url: `https://share.synthesia.io/embeds/videos/${SYNTHESIA_ID}?autoplay=1&mute=1`
-  },
-  "module 2": {
-    type: "youtube",
-    youtubeId: "I2oQuBRNiHs"
-  },
-  "finance & accounting": { aliasOf: "module 1" },
-  "financial accounting": { aliasOf: "module 1" },
-  "human resources": { aliasOf: "module 2" },
-  "hr": { aliasOf: "module 2" }
+  "module 1": { type: "embed", url: `https://share.synthesia.io/embeds/videos/${SYNTHESIA_ID}?autoplay=1&mute=1` },
+  "module 2": { type: "youtube", youtubeId: "I2oQuBRNiHs" }
 };
-function resolveModuleKey(text){
-  const q = text.toLowerCase();
-  for (const k of Object.keys(MODULES)) if (q.includes(k)) return MODULES[k].aliasOf || k;
-  return null;
+
+// Synonyms/keywords per module
+const MODULE_SYNONYMS = {
+  "module 1": [
+    "module 1","mod 1","m1","one","1",
+    "finance","financial","accounting","accounts","ledger","bookkeeping",
+    "finance & accounting","finance and accounting","financial accounting","f&a","fa"
+  ],
+  "module 2": [
+    "module 2","mod 2","m2","two","2",
+    "human resources","human resource","hr","people","talent","recruitment","onboarding","payroll"
+  ]
+};
+
+function normalize(s){ return (s||"").toLowerCase().replace(/[^a-z0-9\s&]/g," ").replace(/\s+/g," ").trim(); }
+
+function levenshtein(a, b){
+  a = a || ""; b = b || "";
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  const dp = Array.from({length: m+1}, (_,i)=>Array(n+1).fill(0));
+  for (let i=0;i<=m;i++) dp[i][0]=i;
+  for (let j=0;j<=n;j++) dp[0][j]=j;
+  for (let i=1;i<=m;i++){
+    for (let j=1;j<=n;j++){
+      const cost = a[i-1]===b[j-1]?0:1;
+      dp[i][j] = Math.min(
+        dp[i-1][j]+1,
+        dp[i][j-1]+1,
+        dp[i-1][j-1]+cost
+      );
+    }
+  }
+  return dp[m][n];
 }
 
-// In-frame overlay
+// Score 0..1 for how well `text` matches `phrase`
+function phraseScore(text, phrase){
+  const t = normalize(text);
+  const p = normalize(phrase);
+  if (!t || !p) return 0;
+
+  if (t.includes(p)) return 1;
+
+  const tks = t.split(" ");
+  const pks = p.split(" ");
+  let hits = 0;
+  for (const pk of pks){
+    if (tks.includes(pk)) { hits++; continue; }
+    const th = pk.length >= 6 ? 2 : (pk.length >= 4 ? 1 : 0);
+    if (tks.some(w => levenshtein(w, pk) <= th)) hits++;
+  }
+  const overlap = hits / pks.length;
+
+  const dist = levenshtein(t, p);
+  const whole = p.length ? 1 - (dist / Math.max(p.length, 1)) : 0;
+
+  return Math.max(overlap * 0.8 + whole * 0.2, whole * 0.7);
+}
+
+// Decide which module the user meant
+function resolveModuleKey(text){
+  const t = normalize(text);
+
+  // Quick numeric words
+  if (/\b(1|one)\b/.test(t)) return "module 1";
+  if (/\b(2|two)\b/.test(t)) return "module 2";
+
+  let best = { key: null, score: 0 };
+  for (const key of Object.keys(MODULE_SYNONYMS)){
+    const syns = MODULE_SYNONYMS[key];
+    const s = syns.reduce((mx,ph)=>Math.max(mx, phraseScore(t, ph)), 0);
+    if (s > best.score) best = { key, score: s };
+  }
+  return best.score >= 0.42 ? best.key : null;
+}
+
+// -------------------- In-frame overlay video --------------------
 function hideOverlay(){
   overlayFrame.src = "about:blank";
   overlay.style.display = "none";
@@ -76,28 +136,26 @@ closeOverlayBtn.addEventListener("click", hideOverlay);
 
 async function showModuleInFrame(modKey){
   const m = MODULES[modKey]; if (!m) return false;
-  hideOverlay(); // reset
-  // Slight delay to ensure layout ready
+  hideOverlay();
   await new Promise(r => setTimeout(r, 50));
   overlay.style.display = "block";
   if (m.type === "embed" && m.url) {
-    overlayFrame.src = m.url;
+    overlayFrame.src = m.url; // Synthesia embed (muted autoplay)
     return true;
   }
   if (m.type === "youtube") {
-    // Use youtube embed url inside iframe (no API needed here)
     overlayFrame.src = `https://www.youtube.com/embed/${m.youtubeId}?autoplay=1&mute=1&rel=0&modestbranding=1`;
     return true;
   }
   return false;
 }
 
-// Web Speech API — always on after first gesture
+// -------------------- Voice: always-on after first gesture --------------------
 let rec, listening = false, autoRestart = true;
 function startMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showError("Voice input not supported in this browser. Try Chrome."); return; }
-  if (rec) return; // already set
+  if (rec) return;
   rec = new SR();
   rec.lang = "en-US";
   rec.interimResults = false;
@@ -112,27 +170,21 @@ function startMic() {
   try { rec.start(); listening = true; } catch {}
 }
 
-// Chroma key (remove green) — draws video onto canvas with transparency
-// Based on HeyGen’s chroma key streaming guide. This makes the stage background visible through the avatar. 
-// Doc: https://docs.heygen.com/docs/adding-chroma-key-to-streaming-demo
+// -------------------- Chroma key (remove green) --------------------
 function startChromaKeyRendering() {
   const ctx = avatarCanvas.getContext("2d");
   let w = stageEl.clientWidth, h = stageEl.clientHeight;
   avatarCanvas.width = w; avatarCanvas.height = h;
 
   function draw() {
-    // draw the video to canvas scaled to stage size
     try {
       ctx.drawImage(avatarVideo, 0, 0, w, h);
       const img = ctx.getImageData(0, 0, w, h);
       const data = img.data;
-      // simple green removal
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i], g = data[i+1], b = data[i+2];
-        // green-dominant threshold
-        if (g > 100 && g > r + 25 && g > b + 25 && r < 140 && b < 140) {
-          data[i+3] = 0; // alpha = 0
-        }
+        // green-dominant threshold (tweak if needed)
+        if (g > 100 && g > r + 25 && g > b + 25 && r < 140 && b < 140) data[i+3] = 0;
       }
       ctx.putImageData(img, 0, 0);
     } catch {}
@@ -140,7 +192,6 @@ function startChromaKeyRendering() {
   }
   draw();
 
-  // resize observer to keep canvas in sync with stage size
   new ResizeObserver(() => {
     w = stageEl.clientWidth;
     h = stageEl.clientHeight;
@@ -148,9 +199,9 @@ function startChromaKeyRendering() {
   }).observe(stageEl);
 }
 
-// Main
+// -------------------- Main flow --------------------
 (async () => {
-  // Get token
+  // Token
   let token;
   try { token = await getToken(); log("Got session token"); }
   catch(e){ showError(e.message); return; }
@@ -158,21 +209,20 @@ function startChromaKeyRendering() {
   const avatar = new StreamingAvatar({ token });
   let session = null;
 
-  // Attach media before start
+  // Media events
   avatar.on(StreamingEvents.STREAM_READY, (event) => {
     const stream = event?.detail?.stream || event?.detail || event?.stream;
     if (!stream) { showError("Stream ready, but no MediaStream provided."); return; }
     avatarVideo.srcObject = stream;
-    avatarVideo.muted = true; // unmuted after user gesture
+    avatarVideo.muted = true; // unmute on first gesture
     unmuteBtn.style.display = "inline-block";
-    // When video can play, begin chroma key render
     avatarVideo.onloadedmetadata = () => startChromaKeyRendering();
   });
   avatar.on(StreamingEvents.STREAM_DISCONNECTED, () => {
     showError("Stream disconnected. Likely firewall/VPN blocking WebRTC or idle timeout.");
   });
 
-  // Start session (greet once)
+  // Start session
   try {
     session = await avatar.createStartAvatar({
       avatarName: "default",
@@ -195,14 +245,14 @@ function startChromaKeyRendering() {
   const sid = session?.session_id;
   const say = (text, task=TaskType.REPEAT) => avatar.speak({ sessionId: sid, text, task_type: task });
 
-  // Greeting once
+  // Greet once
   try {
     await say("Hi there! How are you? I hope you're doing good.", TaskType.REPEAT);
     await new Promise(r => setTimeout(r, 400));
     await say("What is your name, and where are you studying?", TaskType.REPEAT);
   } catch (e) { showError("Speak failed (greeting). " + (e?.message || e)); }
 
-  // Autoplay policy: unmute avatar audio and start voice recognition on first gesture
+  // First gesture: unmute avatar audio + start always-on mic
   function firstGesture() {
     if (avatarVideo.muted) { avatarVideo.muted = false; unmuteBtn.style.display = "none"; }
     startMic();
@@ -216,32 +266,27 @@ function startChromaKeyRendering() {
   function showMenu(){ menuEl.classList.remove("hidden"); }
   function hideMenu(){ menuEl.classList.add("hidden"); }
 
-  // Module button clicks
   document.getElementById("opt1").addEventListener("click", () => handleModule("module 1"));
   document.getElementById("opt2").addEventListener("click", () => handleModule("module 2"));
 
   async function handleModule(modKey){
-    hideOverlay();
-    hideMenu();
+    hideOverlay(); hideMenu();
 
-    // Short notes (summary) per module
     const notes = modKey === "module 1"
-      ? "Module 1 covers Finance and Accounting: recording transactions, summarizing them, and reporting through financial statements."
+      ? "Module 1 covers Finance and Accounting: recording transactions, summarizing them, and reporting via financial statements."
       : "Module 2 covers Human Resources: hiring, onboarding, payroll coordination, performance, and the overall employee lifecycle.";
 
-    // Speak short notes first
     await say(notes, TaskType.REPEAT).catch(()=>{});
 
-    // Rough timing so video appears AFTER summary (estimate ~2.2 words/sec)
+    // Wait so the summary finishes before the video appears
     const ms = Math.max(1200, Math.min(6000, notes.split(/\s+/).length / 2.2 * 1000));
     await new Promise(r => setTimeout(r, ms));
 
-    // Then show video INSIDE portrait
     const ok = await showModuleInFrame(modKey);
-    if (!ok) await say("I couldn't load the module video. Please check the module config.", TaskType.REPEAT).catch(()=>{});
+    if (!ok) await say("I couldn't load the module video. Please check the module configuration.", TaskType.REPEAT).catch(()=>{});
   }
 
-  // Text input routing
+  // Text (and voice-filled) input routing
   askForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const txt = inputEl.value.trim(); inputEl.value = "";
@@ -249,7 +294,7 @@ function startChromaKeyRendering() {
 
     const uniKey = detectUniversity(txt);
     if (uniKey) {
-      applyUniversityBg(uniKey); // silent background change
+      applyUniversityBg(uniKey); // silent
       const uniNice = titleCase(uniKey);
       await say(`Glad to hear from the great ${uniNice}.`, TaskType.REPEAT).catch(()=>{});
       await say("There are two ERP modules available: 1) Finance & Accounting, 2) Human Resources. Which one would you like me to explain?", TaskType.REPEAT).catch(()=>{});
@@ -264,7 +309,7 @@ function startChromaKeyRendering() {
     await say(txt, TaskType.TALK).catch((e)=>showError("Speak failed (general). " + (e?.message || e)));
   });
 
-  // Fallback hint if stream never appears
+  // Fallback hint
   setTimeout(() => {
     if (!avatarVideo.srcObject) {
       showError("No stream after 10s. If /api/token works, your network/VPN may block WebRTC. Try a hotspot or allow UDP 3478 / TCP 443.");
