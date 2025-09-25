@@ -46,6 +46,8 @@
     input { flex: 1; padding: 10px; border: 1px solid #2a2f3a; border-radius: 10px; background: #0f1320; color: #eaeef5; }
     button { padding: 10px 12px; border-radius: 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer; }
     button:hover { background: #1c2336; }
+
+      #mic { min-width: 48px; font-size: 16px; }
   </style>
 </head>
 <body>
@@ -77,8 +79,8 @@
     </div>
 
     <form id="ask">
-      <input id="text" placeholder="Speak or type. Example: 'I'm Alex from Stanford University' or 'Module 1'..." />
       <button type="button" id="mic" title="Speak">🎙️</button>
+      <input id="text" placeholder="Speak or type. Example: 'I'm Alex from Stanford University' or 'Module 1'..." />
       <button type="submit">Send</button>
     </form>
   </div>
