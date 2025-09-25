@@ -13,7 +13,7 @@
     #app { width: min(100%, var(--w)); }
     header { margin-bottom: 10px; }
     h1 { font-size: 18px; margin: 0 0 4px; }
-    .muted { opacity: .7; margin: 0; font-size: 12px; }
+    .muted { opacity: .75; margin: 0; font-size: 12px; }
 
     #banner { position: fixed; top: 0; left: 0; right: 0; padding: 10px 14px;
       background: #2b132a; color: #ffd3e6; border-bottom: 1px solid #6a2a67; font-size: 14px; z-index: 9999; }
@@ -23,18 +23,22 @@
       padding: 10px 14px; border-radius: 10px; border: 1px solid #2a2f3a;
       background: #151a28; color: #eaeef5; cursor: pointer; display: none; }
 
-    #ytWrap, #vidWrap, #embedWrap { margin-bottom: 10px; }
-    #ytWrap.hidden, #vidWrap.hidden, #embedWrap.hidden { display: none; }
-    #ytPlayer, #vid, #embed { width: 100%; aspect-ratio: 16/9; border-radius: 12px; background: #000; }
-    #embed { border: 0; }
-    .embed-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    .embed-bar button { padding: 6px 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; border-radius: 8px; cursor: pointer; }
-
+    /* Portrait stage */
     #stage { width: 100%; aspect-ratio: 9/16; position: relative; overflow: hidden; border-radius: var(--radius);
       background: #1b1f2a center/cover no-repeat; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
-    #avatar { position: absolute; inset: 0; transition: transform .3s ease; }
-    .min { transform: scale(.86) translateY(8%); transform-origin: center bottom; }
 
+    /* Avatar rendering layers */
+    #avatarVideo { position: absolute; inset: 0; opacity: 0; /* audio only; video drawn to canvas */ }
+    #avatarCanvas { position: absolute; inset: 0; display: block; }
+
+    /* In-frame overlay for module video (inside the portrait) */
+    #stageOverlay { position: absolute; left: 3%; right: 3%; top: 3%; aspect-ratio: 16/9;
+      border-radius: 12px; overflow: hidden; background: #000; box-shadow: 0 6px 18px rgba(0,0,0,.35); display: none; }
+    #stageOverlay iframe, #stageOverlay video { width: 100%; height: 100%; border: 0; display: block; }
+    #overlayBar { position: absolute; right: 6px; top: 6px; z-index: 3; display: flex; gap: 6px; }
+    #overlayBar button { padding: 6px 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; border-radius: 8px; cursor: pointer; }
+
+    /* Module menu */
     #menu { margin-top: 10px; background: #0f1320; border: 1px solid #2a2f3a; padding: 10px; border-radius: 12px; }
     #menu.hidden { display: none; }
     #menu p { margin: 0 0 8px; font-size: 13px; opacity: .85; }
@@ -42,12 +46,11 @@
       border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer; }
     #menu button:hover { background: #1c2336; }
 
+    /* Input */
     form { display: flex; gap: 8px; margin-top: 10px; }
     input { flex: 1; padding: 10px; border: 1px solid #2a2f3a; border-radius: 10px; background: #0f1320; color: #eaeef5; }
     button { padding: 10px 12px; border-radius: 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer; }
     button:hover { background: #1c2336; }
-
-      #mic { min-width: 48px; font-size: 16px; }
   </style>
 </head>
 <body>
@@ -57,20 +60,20 @@
   <div id="app">
     <header>
       <h1>Avatar Gen - ERP (Portrait)</h1>
-      <p class="muted">Greets once → detect name & university → auto background (silent) → show module choices → play video above</p>
+      <p class="muted">Greets once → detect name & university → auto background → choose module → summary → in-frame video</p>
     </header>
 
-    <div id="ytWrap" class="hidden"><div id="ytPlayer"></div></div>
-    <div id="vidWrap" class="hidden"><video id="vid" controls></video></div>
-    <div id="embedWrap" class="hidden">
-      <div class="embed-bar">
-        <span>Embedded Module</span>
-        <button id="closeEmbed">Close</button>
-      </div>
-      <iframe id="embed" allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
-    </div>
+    <div id="stage">
+      <!-- University background is applied to #stage via CSS background-image -->
+      <video id="avatarVideo" playsinline autoplay muted></video>
+      <canvas id="avatarCanvas"></canvas>
 
-    <div id="stage"><div id="avatar"></div></div>
+      <!-- In-frame overlay (video lives INSIDE the portrait) -->
+      <div id="stageOverlay">
+        <div id="overlayBar"><button id="closeOverlay">Close</button></div>
+        <iframe id="overlayFrame" allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+      </div>
+    </div>
 
     <div id="menu" class="hidden">
       <p>ERP modules available:</p>
@@ -79,8 +82,7 @@
     </div>
 
     <form id="ask">
-      <button type="button" id="mic" title="Speak">🎙️</button>
-      <input id="text" placeholder="Speak or type. Example: 'I'm Alex from Stanford University' or 'Module 1'..." />
+      <input id="text" placeholder="Say or type: 'I'm Alex from Stanford University' or 'Module 1'..." />
       <button type="submit">Send</button>
     </form>
   </div>
