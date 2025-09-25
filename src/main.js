@@ -21,10 +21,9 @@ async function getToken(){
   if (!r.ok || !j?.token) throw new Error("Token error: " + (j?.error || "no token"));
   return j.token;
 }
-
 function titleCase(s){ return s.replace(/\b\w/g, ch => ch.toUpperCase()); }
 
-// -------------------- University backgrounds --------------------
+/* -------------------- University backgrounds -------------------- */
 const UNI_BG = {
   "oxford":"https://source.unsplash.com/1080x1920/?oxford,university",
   "oxford university":"https://source.unsplash.com/1080x1920/?oxford,university",
@@ -44,14 +43,12 @@ function applyUniversityBg(key){
   stageEl.style.backgroundImage = `url(${UNI_BG[key]})`;
 }
 
-// -------------------- Modules + FUZZY matching --------------------
+/* -------------------- Modules + FUZZY matching -------------------- */
 const SYNTHESIA_ID = "dd552b45-bf27-48c4-96a6-77a2d59e63e7";
 const MODULES = {
   "module 1": { type: "embed", url: `https://share.synthesia.io/embeds/videos/${SYNTHESIA_ID}?autoplay=1&mute=1` },
   "module 2": { type: "youtube", youtubeId: "I2oQuBRNiHs" }
 };
-
-// Synonyms/keywords per module
 const MODULE_SYNONYMS = {
   "module 1": [
     "module 1","mod 1","m1","one","1",
@@ -63,9 +60,7 @@ const MODULE_SYNONYMS = {
     "human resources","human resource","hr","people","talent","recruitment","onboarding","payroll"
   ]
 };
-
 function normalize(s){ return (s||"").toLowerCase().replace(/[^a-z0-9\s&]/g," ").replace(/\s+/g," ").trim(); }
-
 function levenshtein(a, b){
   a = a || ""; b = b || "";
   const m = a.length, n = b.length;
@@ -76,26 +71,16 @@ function levenshtein(a, b){
   for (let i=1;i<=m;i++){
     for (let j=1;j<=n;j++){
       const cost = a[i-1]===b[j-1]?0:1;
-      dp[i][j] = Math.min(
-        dp[i-1][j]+1,
-        dp[i][j-1]+1,
-        dp[i-1][j-1]+cost
-      );
+      dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost);
     }
   }
   return dp[m][n];
 }
-
-// Score 0..1 for how well `text` matches `phrase`
 function phraseScore(text, phrase){
-  const t = normalize(text);
-  const p = normalize(phrase);
+  const t = normalize(text), p = normalize(phrase);
   if (!t || !p) return 0;
-
   if (t.includes(p)) return 1;
-
-  const tks = t.split(" ");
-  const pks = p.split(" ");
+  const tks = t.split(" "), pks = p.split(" ");
   let hits = 0;
   for (const pk of pks){
     if (tks.includes(pk)) { hits++; continue; }
@@ -103,34 +88,27 @@ function phraseScore(text, phrase){
     if (tks.some(w => levenshtein(w, pk) <= th)) hits++;
   }
   const overlap = hits / pks.length;
-
   const dist = levenshtein(t, p);
   const whole = p.length ? 1 - (dist / Math.max(p.length, 1)) : 0;
-
   return Math.max(overlap * 0.8 + whole * 0.2, whole * 0.7);
 }
-
-// Decide which module the user meant
 function resolveModuleKey(text){
   const t = normalize(text);
-
-  // Quick numeric words
   if (/\b(1|one)\b/.test(t)) return "module 1";
   if (/\b(2|two)\b/.test(t)) return "module 2";
-
   let best = { key: null, score: 0 };
   for (const key of Object.keys(MODULE_SYNONYMS)){
-    const syns = MODULE_SYNONYMS[key];
-    const s = syns.reduce((mx,ph)=>Math.max(mx, phraseScore(t, ph)), 0);
+    const s = MODULE_SYNONYMS[key].reduce((mx,ph)=>Math.max(mx, phraseScore(t, ph)), 0);
     if (s > best.score) best = { key, score: s };
   }
   return best.score >= 0.42 ? best.key : null;
 }
 
-// -------------------- In-frame overlay video --------------------
+/* -------------------- In-frame overlay video -------------------- */
 function hideOverlay(){
   overlayFrame.src = "about:blank";
   overlay.style.display = "none";
+  stageEl.classList.remove("min");
 }
 closeOverlayBtn.addEventListener("click", hideOverlay);
 
@@ -139,18 +117,19 @@ async function showModuleInFrame(modKey){
   hideOverlay();
   await new Promise(r => setTimeout(r, 50));
   overlay.style.display = "block";
+  stageEl.classList.add("min");
   if (m.type === "embed" && m.url) {
     overlayFrame.src = m.url; // Synthesia embed (muted autoplay)
     return true;
   }
   if (m.type === "youtube") {
-    overlayFrame.src = `https://www.youtube.com/embed/${m.youtubeId}?autoplay=1&mute=1&rel=0&modestbranding=1`;
+    overlayFrame.src = `https://www.youtube-nocookie.com/embed/${m.youtubeId}?autoplay=1&mute=1&rel=0&modestbranding=1`;
     return true;
   }
   return false;
 }
 
-// -------------------- Voice: always-on after first gesture --------------------
+/* -------------------- Voice: always-on after first gesture -------------------- */
 let rec, listening = false, autoRestart = true;
 function startMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -170,36 +149,46 @@ function startMic() {
   try { rec.start(); listening = true; } catch {}
 }
 
-// -------------------- Chroma key (remove green) --------------------
+/* -------------------- Chroma key (green removal) + cover fit -------------------- */
 function startChromaKeyRendering() {
   const ctx = avatarCanvas.getContext("2d");
-  let w = stageEl.clientWidth, h = stageEl.clientHeight;
-  avatarCanvas.width = w; avatarCanvas.height = h;
+  let cw = stageEl.clientWidth, ch = stageEl.clientHeight;
+  avatarCanvas.width = cw; avatarCanvas.height = ch;
 
   function draw() {
     try {
-      ctx.drawImage(avatarVideo, 0, 0, w, h);
-      const img = ctx.getImageData(0, 0, w, h);
-      const data = img.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i+1], b = data[i+2];
-        // green-dominant threshold (tweak if needed)
-        if (g > 100 && g > r + 25 && g > b + 25 && r < 140 && b < 140) data[i+3] = 0;
+      const vw = avatarVideo.videoWidth || 640;
+      const vh = avatarVideo.videoHeight || 360;
+      if (vw && vh) {
+        // object-fit: cover (crop source to preserve aspect)
+        const cr = cw / ch, vr = vw / vh;
+        let sx=0, sy=0, sw=vw, sh=vh;
+        if (vr > cr) { sw = Math.round(vh * cr); sx = Math.round((vw - sw) / 2); }
+        else { sh = Math.round(vw / cr); sy = Math.round((vh - sh) / 2); }
+        ctx.drawImage(avatarVideo, sx, sy, sw, sh, 0, 0, cw, ch);
+
+        // chroma-key remove green
+        const img = ctx.getImageData(0, 0, cw, ch);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i+1], b = d[i+2];
+          if (g > 80 && g > r + 20 && g > b + 20 && r < 160 && b < 160) d[i+3] = 0;
+        }
+        ctx.putImageData(img, 0, 0);
       }
-      ctx.putImageData(img, 0, 0);
     } catch {}
     requestAnimationFrame(draw);
   }
   draw();
 
   new ResizeObserver(() => {
-    w = stageEl.clientWidth;
-    h = stageEl.clientHeight;
-    avatarCanvas.width = w; avatarCanvas.height = h;
+    cw = stageEl.clientWidth;
+    ch = stageEl.clientHeight;
+    avatarCanvas.width = cw; avatarCanvas.height = ch;
   }).observe(stageEl);
 }
 
-// -------------------- Main flow --------------------
+/* -------------------- Main flow -------------------- */
 (async () => {
   // Token
   let token;
