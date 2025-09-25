@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Avatar Gen - ERP (Portrait)</title>
+  <link rel="icon" href="data:,">
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <style>
+    :root { --w: 420px; --radius: 16px; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+           display: flex; justify-content: center; padding: 16px; background: #0f1115; color: #eaeef5; }
+    #app { width: min(100%, var(--w)); }
+    header { margin-bottom: 10px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .muted { opacity: .7; margin: 0; font-size: 12px; }
+    #banner { position: fixed; top: 0; left: 0; right: 0; padding: 10px 14px; background: #2b132a; color: #ffd3e6; border-bottom: 1px solid #6a2a67; font-size: 14px; z-index: 9999; }
+    #banner.hidden { display: none; }
+    #unmute { position: fixed; right: 12px; bottom: 12px; z-index: 10000; padding: 10px 14px; border-radius: 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer; display: none; }
+    #ytWrap, #vidWrap, #embedWrap { margin-bottom: 10px; }
+    #ytWrap.hidden, #vidWrap.hidden, #embedWrap.hidden { display: none; }
+    #ytPlayer, #vid, #embed { width: 100%; aspect-ratio: 16/9; border-radius: 12px; background: #000; }
+    #embed { border: 0; }
+    .embed-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .embed-bar button { padding: 6px 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; border-radius: 8px; cursor: pointer; }
+    #stage { width: 100%; aspect-ratio: 9/16; position: relative; overflow: hidden; border-radius: var(--radius); background: #1b1f2a center/cover no-repeat; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+    #avatar { position: absolute; inset: 0; transition: transform .3s ease; }
+    .min { transform: scale(.86) translateY(8%); transform-origin: center bottom; }
+    form { display: flex; gap: 8px; margin-top: 10px; }
+    input { flex: 1; padding: 10px; border: 1px solid #2a2f3a; border-radius: 10px; background: #0f1320; color: #eaeef5; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer; }
+    button:hover { background: #1c2336; }
+  </style>
+</head>
+<body>
+  <div id="banner" class="hidden"></div>
+  <button id="unmute">Enable sound</button>
+  <div id="app">
+    <header>
+      <h1>Avatar Gen - ERP (Portrait)</h1>
+      <p class="muted">Greets -> asks name & university -> auto background -> Module 1/2 video on top -> general Q&A</p>
+    </header>
+    <div id="ytWrap" class="hidden"><div id="ytPlayer"></div></div>
+    <div id="vidWrap" class="hidden"><video id="vid" controls></video></div>
+    <div id="embedWrap" class="hidden">
+      <div class="embed-bar"><span>Embedded Module</span><button id="closeEmbed">Close</button></div>
+      <iframe id="embed" allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+    </div>
+    <div id="stage"><div id="avatar"></div></div>
+    <form id="ask">
+      <input id="text" placeholder="Type your name + university (Oxford/Shawnee/Stanford) or ask about Module 1 / Module 2..." />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

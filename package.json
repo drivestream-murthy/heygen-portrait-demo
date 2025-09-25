@@ -1,0 +1,1 @@
+{"name":"heygen-portrait-demo","private":true,"type":"module","engines":{"node":"20.x"},"scripts":{"dev":"vite","build":"vite build","preview":"vite preview --host"},"dependencies":{"@heygen/streaming-avatar":"^2.1.0","livekit-client":"^2.5.3"},"devDependencies":{"vite":"^5.4.0"}}
