@@ -4,12 +4,13 @@ import StreamingAvatar, { StreamingEvents, TaskType, AvatarQuality } from "@heyg
 const banner = document.getElementById("banner");
 const startBtn = document.getElementById("startBtn");
 const stageEl = document.getElementById("stage");
-const avatarVideo = document.getElementById("avatarVideo");   // audio source (hidden)
-const avatarCanvas = document.getElementById("avatarCanvas"); // visual with chroma key
+const avatarVideo = document.getElementById("avatarVideo");
+const avatarCanvas = document.getElementById("avatarCanvas");
 const overlay = document.getElementById("stageOverlay");
-const overlayFrame = document.getElementById("overlayFrame"); // Synthesia / web
-const ytContainer = document.getElementById("ytContainer");   // YouTube API container
+const overlayFrame = document.getElementById("overlayFrame");
+const ytContainer = document.getElementById("ytContainer");
 const closeOverlayBtn = document.getElementById("closeOverlay");
+const overlayToggle = document.getElementById("overlayToggle");
 
 const confirmBar = document.getElementById("confirmBar");
 const confirmYes = document.getElementById("confirmYes");
@@ -25,6 +26,8 @@ const inputEl = document.getElementById("text");
 const log = (...a)=>console.log("[heygen]",...a);
 const showError = (msg)=>{ banner.textContent = msg; banner.classList.remove("hidden"); console.error(msg); };
 const hideError = ()=>banner.classList.add("hidden");
+const titleCase = (s)=>s.replace(/\b\w/g, ch => ch.toUpperCase());
+const sleep = (ms)=>new Promise(r=>setTimeout(r, ms));
 
 async function getToken(){
   const r = await fetch("/api/token");
@@ -32,10 +35,8 @@ async function getToken(){
   if (!r.ok || !j?.token) throw new Error("Token error: " + (j?.error || "no token"));
   return j.token;
 }
-const titleCase = (s)=>s.replace(/\b\w/g, ch => ch.toUpperCase());
-const sleep = (ms)=>new Promise(r=>setTimeout(r, ms));
 
-/* ---------- backgrounds (serve from /public/assets/*) ---------- */
+/* ---------- backgrounds ---------- */
 const BG = {
   DEFAULT: "/assets/default-image.jpg",
   STANFORD: "/assets/stanford-university-title.jpg",
@@ -57,7 +58,7 @@ function detectUniversity(text){
   return null;
 }
 
-/* ---------- ERP Modules (with fuzzy matching) ---------- */
+/* ---------- ERP (fuzzy) ---------- */
 const SYNTHESIA_ID = "dd552b45-bf27-48c4-96a6-77a2d59e63e7";
 const MODULES = {
   "module 1": { type: "synthesia", url: `https://share.synthesia.io/embeds/videos/${SYNTHESIA_ID}?autoplay=1&mute=1` },
@@ -82,7 +83,7 @@ function resolveModuleKey(text){
   return best.score>=0.42?best.key:null;
 }
 
-/* ---------- Drivestream topics (simple, safe summaries + links) ---------- */
+/* ---------- Drivestream topics ---------- */
 const DS = {
   home:     { keys:["drivestream","website","home"], summary:"Drivestream delivers Oracle Cloud consulting and enterprise transformation.", url:"http://www.drivestream.com/" },
   about:    { keys:["about","company","the company"], summary:"Learn about Drivestream’s mission, leadership and story.", url:"https://www.drivestream.com/the-company/" },
@@ -119,11 +120,7 @@ let youTubeReady;
 {
   let _resolve;
   youTubeReady = new Promise(res => { _resolve = res; });
-  // If API already loaded
-  const wait = () => {
-    if (window.YT && window.YT.Player) return _resolve();
-    setTimeout(wait, 50);
-  };
+  const wait = () => { if (window.YT && window.YT.Player) return _resolve(); setTimeout(wait, 50); };
   window.onYouTubeIframeAPIReady = () => _resolve();
   wait();
 }
@@ -135,6 +132,7 @@ function hideOverlay({resetBg=true}={}) {
   if (ytPlayer) { try { ytPlayer.destroy(); } catch {} ytPlayer = null; }
   ytContainer.innerHTML = "";
   overlay.style.display = "none";
+  overlayToggle.style.display = "none";
   stageEl.classList.remove("min");
   if (resetBg) resetToDefault();
 }
@@ -147,8 +145,10 @@ async function showModuleInFrame(modKey){
 
   if (m.type === "synthesia") {
     overlayFrame.classList.add("show");
+    ytContainer.classList.remove("show");
     overlayFrame.src = m.url; // autoplay muted per policy
-    // No reliable 'ended' event from cross-origin Synthesia → optional 2m fallback
+    overlayToggle.style.display = "none"; // cannot control Synthesia cross-origin
+    // Fallback auto-close after 2 minutes
     setTimeout(()=>{ if (overlay.style.display!=="none") { hideOverlay(); speakNext("The video has finished. What would you like next?"); }}, 120000);
     return true;
   }
@@ -159,7 +159,7 @@ async function showModuleInFrame(modKey){
     ytContainer.appendChild(div); ytContainer.classList.add("show");
     ytPlayer = new YT.Player("ytInner", {
       videoId: m.youtubeId,
-      playerVars: { autoplay: 1, mute: 1, rel: 0, modestbranding: 1 },
+      playerVars: { autoplay: 1, mute: 1, rel: 0, modestbranding: 1, controls: 1 },
       events: {
         onStateChange: (e) => {
           if (e.data === YT.PlayerState.ENDED) {
@@ -169,6 +169,15 @@ async function showModuleInFrame(modKey){
         }
       }
     });
+    // Show Play/Pause button for YouTube
+    overlayToggle.style.display = "inline-block";
+    overlayToggle.textContent = "⏸ Pause";
+    overlayToggle.onclick = ()=>{
+      if (!ytPlayer) return;
+      const st = ytPlayer.getPlayerState();
+      if (st === YT.PlayerState.PLAYING) { ytPlayer.pauseVideo(); overlayToggle.textContent = "▶ Play"; }
+      else { ytPlayer.playVideo(); overlayToggle.textContent = "⏸ Pause"; }
+    };
     return true;
   }
   return false;
@@ -195,7 +204,7 @@ function startMic() {
   try { rec.start(); listening = true; } catch {}
 }
 
-/* ---------- Chroma-key (green removal) + cover fit ---------- */
+/* ---------- Chroma-key + cover fit ---------- */
 function startChromaKeyRendering() {
   const ctx = avatarCanvas.getContext("2d");
   let cw = stageEl.clientWidth, ch = stageEl.clientHeight;
@@ -205,14 +214,12 @@ function startChromaKeyRendering() {
     try {
       const vw = avatarVideo.videoWidth || 640, vh = avatarVideo.videoHeight || 360;
       if (vw && vh) {
-        // object-fit: cover (crop source to preserve aspect)
         const cr = cw / ch, vr = vw / vh;
         let sx=0, sy=0, sw=vw, sh=vh;
         if (vr > cr) { sw = Math.round(vh * cr); sx = Math.round((vw - sw) / 2); }
         else { sh = Math.round(vw / cr); sy = Math.round((vh - sh) / 2); }
         ctx.drawImage(avatarVideo, sx, sy, sw, sh, 0, 0, cw, ch);
 
-        // chroma key
         const img = ctx.getImageData(0, 0, cw, ch), d = img.data;
         for (let i = 0; i < d.length; i += 4) {
           const r = d[i], g = d[i+1], b = d[i+2];
@@ -224,11 +231,7 @@ function startChromaKeyRendering() {
     requestAnimationFrame(draw);
   }
   draw();
-
-  new ResizeObserver(() => {
-    cw = stageEl.clientWidth; ch = stageEl.clientHeight;
-    avatarCanvas.width = cw; avatarCanvas.height = ch;
-  }).observe(stageEl);
+  new ResizeObserver(() => { cw = stageEl.clientWidth; ch = stageEl.clientHeight; avatarCanvas.width = cw; avatarCanvas.height = ch; }).observe(stageEl);
 }
 
 /* ---------- HeyGen session ---------- */
@@ -239,7 +242,6 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
 (async () => {
   applyBg("DEFAULT"); // default background at start
 
-  // Token + stream
   let token; try { token = await getToken(); } catch(e){ showError(e.message); return; }
   avatar = new StreamingAvatar({ token });
 
@@ -247,8 +249,9 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
     const stream = event?.detail?.stream || event?.detail || event?.stream;
     if (!stream) { showError("Stream ready, but no MediaStream provided."); return; }
     avatarVideo.srcObject = stream;
-    avatarVideo.muted = true; // unmute after Start
-    startBtn.classList.remove("hidden");
+    avatarVideo.muted = true;                // unmute after Start
+    startBtn.classList.remove("hidden");     // <-- now visible
+    startBtn.textContent = "▶ Start";
     avatarVideo.onloadedmetadata = () => startChromaKeyRendering();
   });
   avatar.on(StreamingEvents.STREAM_DISCONNECTED, () => showError("Stream disconnected. If /api/token works, check VPN/firewall."));
@@ -270,28 +273,30 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
     sid = session?.session_id;
   } catch(e){ showError("Failed to start avatar session. "+(e?.message||e)); return; }
 
-  // Greeting
+  // Greeting (may be muted until user hits Start)
   await speakNext("Hi there! How are you? I hope you're doing good.");
   await sleep(400);
   await speakNext("What is your name, and where are you studying?");
 
-  // Start button: unmutes audio and starts always-on mic; acts as sound toggle afterwards
+  // ▶ / ⏸ button toggles audio; on first unmute we confirm with voice + start mic
+  let hasWelcomedAudio = false;
   startBtn.addEventListener("click", ()=>{
     if (avatarVideo.muted) {
       avatarVideo.muted = false;
       startBtn.textContent = "⏸ Sound";
       startMic();
+      if (!hasWelcomedAudio) { hasWelcomedAudio = true; speakNext("Audio enabled. You can speak or type your question."); }
     } else {
       avatarVideo.muted = true;
       startBtn.textContent = "▶ Sound";
     }
   });
 
-  // ERP menu buttons
+  // ERP menu
   document.getElementById("opt1").addEventListener("click", ()=> askToPlay("module 1"));
   document.getElementById("opt2").addEventListener("click", ()=> askToPlay("module 2"));
 
-  // Drivestream menu buttons
+  // Drivestream menu
   Array.from(menuDS.querySelectorAll("button[data-ds]")).forEach(btn=>{
     btn.addEventListener("click", ()=> handleDSTopic(btn.dataset.ds));
   });
@@ -304,7 +309,6 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
 
     hideError(); confirmBar.classList.add("hidden");
 
-    // University → change background silently, then show choices
     const uniBg = detectUniversity(txt);
     if (uniBg) {
       applyBg(uniBg);
@@ -313,15 +317,12 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
       showMenus(); return;
     }
 
-    // ERP module fuzzy
     const modKey = resolveModuleKey(txt);
     if (modKey) { await askToPlay(modKey); return; }
 
-    // Drivestream topic fuzzy
     const dsKey = resolveDSTopic(txt);
     if (dsKey) { await handleDSTopic(dsKey); return; }
 
-    // General Q&A (fallback if model can’t find info)
     try { await speak(txt, TaskType.TALK); }
     catch { await speakNext("There isn’t enough information for that. Try asking about Drivestream or ERP Module 1/2."); }
   });
@@ -338,12 +339,8 @@ async function askToPlay(modKey){
     ? "ERP Module 1 covers Finance and Accounting: recording transactions, summarizing them, and reporting via financial statements."
     : "ERP Module 2 covers Human Resources: hiring, onboarding, payroll, performance, and the overall employee lifecycle.";
   await speakNext(notes);
-
-  // Ensure video only after the speaking finishes (roughly 2.2 w/s)
   const ms = Math.max(1200, Math.min(6000, notes.split(/\s+/).length/2.2*1000));
   await sleep(ms);
-
-  // Ask consent to play
   confirmBar.classList.remove("hidden");
   confirmYes.onclick = async ()=>{
     confirmBar.classList.add("hidden");
