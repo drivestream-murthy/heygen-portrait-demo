@@ -5,29 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Avatar Gen - ERP (Portrait)</title>
   <link rel="icon" href="data:,">
+  <!-- YouTube IFrame API (for Module 2 end-detection) -->
+  <script src="https://www.youtube.com/iframe_api"></script>
   <style>
     :root { --w: 420px; --radius: 16px; }
     * { box-sizing: border-box; }
-    body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      display: flex; justify-content: center; padding: 16px; background: #0f1115; color: #eaeef5;
-    }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+           display: flex; justify-content: center; padding: 16px; background: #0f1115; color: #eaeef5; }
     #app { width: min(100%, var(--w)); }
     header { margin-bottom: 10px; }
     h1 { font-size: 18px; margin: 0 0 4px; }
     .muted { opacity: .75; margin: 0; font-size: 12px; }
 
-    #banner {
-      position: fixed; top: 0; left: 0; right: 0; padding: 10px 14px;
-      background: #2b132a; color: #ffd3e6; border-bottom: 1px solid #6a2a67; font-size: 14px; z-index: 9999;
-    }
+    #banner { position: fixed; top: 0; left: 0; right: 0; padding: 10px 14px;
+      background: #2b132a; color: #ffd3e6; border-bottom: 1px solid #6a2a67; font-size: 14px; z-index: 9999; }
     #banner.hidden { display: none; }
 
-    #unmute {
-      position: fixed; right: 12px; bottom: 12px; z-index: 10000;
-      padding: 10px 14px; border-radius: 10px; border: 1px solid #2a2f3a;
-      background: #151a28; color: #eaeef5; cursor: pointer; display: none;
-    }
+    /* ▶ / ⏸ sound button (also triggers mic start) */
+    #startBtn { position: fixed; right: 12px; bottom: 12px; z-index: 10000;
+      padding: 12px 16px; border-radius: 12px; border: 1px solid #2a2f3a;
+      background: #0f1320; color: #eaeef5; cursor: pointer; display: none; }
+    #startBtn.hidden { display: none; }
 
     /* Portrait stage */
     #stage {
@@ -36,39 +34,33 @@
     }
 
     /* Avatar layers */
-    #avatarVideo, #avatarCanvas {
-      position: absolute; inset: 0;
-      z-index: 1;
-      transition: transform .3s ease;
-    }
+    #avatarVideo, #avatarCanvas { position: absolute; inset: 0; z-index: 1; transition: transform .3s ease; }
     #avatarVideo { opacity: 0; } /* audio only; we draw video to canvas */
-    /* Shrink avatar a bit when video shows so face isn’t covered */
+
+    /* When video shows, nudge avatar smaller so face isn't covered */
     #stage.min #avatarCanvas, #stage.min #avatarVideo {
       transform: scale(.86) translateY(8%);
       transform-origin: center bottom;
     }
 
-    /* In-frame overlay (module video INSIDE portrait) */
+    /* In-frame overlay (module video INSIDE the portrait) */
     #stageOverlay {
       position: absolute; left: 3%; right: 3%; top: 3%;
       aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; background: #000;
       box-shadow: 0 6px 18px rgba(0,0,0,.35); display: none; z-index: 2;
     }
-    #stageOverlay iframe, #stageOverlay video { width: 100%; height: 100%; border: 0; display: block; }
     #overlayBar { position: absolute; right: 6px; top: 6px; z-index: 3; display: flex; gap: 6px; }
-    #overlayBar button {
-      padding: 6px 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; border-radius: 8px; cursor: pointer;
-    }
+    #overlayBar button { padding: 6px 10px; border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; border-radius: 8px; cursor: pointer; }
+    #ytContainer, #overlayFrame { width: 100%; height: 100%; border: 0; display: none; }
+    .show { display: block !important; }
 
-    /* Menu & input */
-    #menu { margin-top: 10px; background: #0f1320; border: 1px solid #2a2f3a; padding: 10px; border-radius: 12px; }
-    #menu.hidden { display: none; }
-    #menu p { margin: 0 0 8px; font-size: 13px; opacity: .85; }
-    #menu button {
-      display: block; width: 100%; text-align: left; margin: 6px 0; padding: 10px; border-radius: 10px;
-      border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer;
-    }
-    #menu button:hover { background: #1c2336; }
+    /* Menus & confirm */
+    .card { margin-top: 10px; background: #0f1320; border: 1px solid #2a2f3a; padding: 10px; border-radius: 12px; }
+    .card.hidden { display: none; }
+    .card p { margin: 0 0 8px; font-size: 13px; opacity: .85; }
+    .card button { display: block; width: 100%; text-align: left; margin: 6px 0; padding: 10px; border-radius: 10px;
+      border: 1px solid #2a2f3a; background: #151a28; color: #eaeef5; cursor: pointer; }
+    .card button:hover { background: #1c2336; }
 
     form { display: flex; gap: 8px; margin-top: 10px; }
     input { flex: 1; padding: 10px; border: 1px solid #2a2f3a; border-radius: 10px; background: #0f1320; color: #eaeef5; }
@@ -78,37 +70,55 @@
 </head>
 <body>
   <div id="banner" class="hidden"></div>
-  <button id="unmute">Enable sound</button>
+  <button id="startBtn" class="hidden">▶ Start</button>
 
   <div id="app">
     <header>
       <h1>Avatar Gen - ERP (Portrait)</h1>
-      <p class="muted">Greets once → detect name & university → auto background → choose module → summary → in-frame video</p>
+      <p class="muted">Greets once → name & university → auto background → choose Drivestream topics or ERP → summary → ask to play → in-frame video</p>
     </header>
 
     <div id="stage">
-      <!-- University background is applied here via CSS background-image -->
       <video id="avatarVideo" playsinline autoplay muted></video>
       <canvas id="avatarCanvas"></canvas>
 
-      <!-- Module video inside portrait -->
       <div id="stageOverlay">
         <div id="overlayBar"><button id="closeOverlay">Close</button></div>
-        <iframe id="overlayFrame"
-          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-          referrerpolicy="origin-when-cross-origin">
-        </iframe>
+        <div id="ytContainer"></div>
+        <iframe id="overlayFrame" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="origin-when-cross-origin"></iframe>
       </div>
     </div>
 
-    <div id="menu" class="hidden">
-      <p>ERP modules available:</p>
-      <button id="opt1">Module 1 — Finance & Accounting</button>
-      <button id="opt2">Module 2 — Human Resources (HR)</button>
+    <div id="confirmBar" class="card hidden">
+      <p>Would you like to watch the video now?</p>
+      <div style="display:flex; gap:8px;">
+        <button id="confirmYes">Yes, play video</button>
+        <button id="confirmNo">No, continue</button>
+      </div>
+    </div>
+
+    <div id="menuERP" class="card hidden">
+      <p>ERP training options:</p>
+      <button id="opt1">ERP Module 1 — Finance & Accounting</button>
+      <button id="opt2">ERP Module 2 — Human Resources (HR)</button>
+    </div>
+
+    <div id="menuDS" class="card hidden">
+      <p>Drivestream topics:</p>
+      <button data-ds="about">About Drivestream</button>
+      <button data-ds="partners">Partners</button>
+      <button data-ds="services">Oracle Cloud Services & Subscription</button>
+      <button data-ds="erp">Oracle Cloud ERP</button>
+      <button data-ds="hcm">Oracle Cloud HCM & Payroll</button>
+      <button data-ds="advisory">Strategy & Advisory</button>
+      <button data-ds="ams">AMS (Managed Services)</button>
+      <button data-ds="industries">Industries</button>
+      <button data-ds="customers">Customers</button>
+      <button data-ds="team">Meet the Team</button>
     </div>
 
     <form id="ask">
-      <input id="text" placeholder="Say or type: “I'm Alex from Stanford University” or “Module 1”..." />
+      <input id="text" placeholder="Say or type: “I'm Alex from Stanford University”, “ERP Module 1”, or “Drivestream partners”..." />
       <button type="submit">Send</button>
     </form>
   </div>
