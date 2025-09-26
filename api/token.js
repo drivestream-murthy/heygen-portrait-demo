@@ -7,10 +7,9 @@ export default async function handler(req, res) {
   try {
     const r = await fetch('https://api.heygen.com/v1/streaming.create_token', {
       method: 'POST',
-      headers: { 'X-Api-Key': apiKey } // HeyGen expects this header
+      headers: { 'X-Api-Key': apiKey }
     });
     const body = await r.json().catch(() => ({}));
-
     if (!r.ok) return res.status(r.status).json(body);
 
     const token = body?.data?.token || body?.token;
