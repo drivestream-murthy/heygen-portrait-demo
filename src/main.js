@@ -9,8 +9,10 @@ const avatarCanvas = document.getElementById("avatarCanvas");
 const overlay = document.getElementById("stageOverlay");
 const overlayFrame = document.getElementById("overlayFrame");
 const ytContainer = document.getElementById("ytContainer");
-const closeOverlayBtn = document.getElementById("closeOverlay");
 const overlayToggle = document.getElementById("overlayToggle");
+const closeOverlayBtn = document.getElementById("closeOverlay");
+const micChip = document.getElementById("micChip");
+const micLabel = document.getElementById("micLabel");
 
 const confirmBar = document.getElementById("confirmBar");
 const confirmYes = document.getElementById("confirmYes");
@@ -43,10 +45,8 @@ const BG = {
   HARVARD: "/assets/harvard-university-title.jpg",
   OXFORD: "/assets/oxford-university-title.jpg"
 };
-let currentBg = "DEFAULT";
-function applyBg(key="DEFAULT"){ currentBg = key; stageEl.style.backgroundImage = `url(${BG[key]||BG.DEFAULT})`; }
+function applyBg(key="DEFAULT"){ stageEl.style.backgroundImage = `url(${BG[key]||BG.DEFAULT})`; }
 function resetToDefault(){ applyBg("DEFAULT"); }
-
 const UNI_MAP = [
   { keys: ["stanford","stanford university"], bg: "STANFORD" },
   { keys: ["harvard","harvard university"],   bg: "HARVARD"  },
@@ -65,16 +65,16 @@ const MODULES = {
   "module 2": { type: "youtube",   youtubeId: "I2oQuBRNiHs" }
 };
 const MODULE_SYNONYMS = {
-  "module 1": ["module 1","mod 1","m1","one","1","finance","financial","accounting","accounts","ledger","bookkeeping","finance & accounting","finance and accounting","financial accounting","f&a","fa"],
-  "module 2": ["module 2","mod 2","m2","two","2","human resources","human resource","hr","people","talent","recruitment","onboarding","payroll"]
+  "module 1": ["erp module 1","module 1","mod 1","m1","one","1","finance","financial","accounting","accounts","ledger","bookkeeping","finance & accounting","finance and accounting","financial accounting","f&a","fa"],
+  "module 2": ["erp module 2","module 2","mod 2","m2","two","2","human resources","human resource","hr","people","talent","recruitment","onboarding","payroll"]
 };
 const normalize = (s)=> (s||"").toLowerCase().replace(/[^a-z0-9\s&]/g," ").replace(/\s+/g," ").trim();
 function levenshtein(a,b){a=a||"";b=b||"";const m=a.length,n=b.length;if(!m)return n;if(!n)return m;const dp=Array.from({length:m+1},(_,i)=>Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++){for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c)}}return dp[m][n]}
 function phraseScore(text,phrase){const t=normalize(text),p=normalize(phrase);if(!t||!p)return 0;if(t.includes(p))return 1;const tks=t.split(" "),pks=p.split(" ");let hits=0;for(const pk of pks){if(tks.includes(pk)){hits++;continue}const th=pk.length>=6?2:(pk.length>=4?1:0);if(tks.some(w=>levenshtein(w,pk)<=th))hits++}const overlap=hits/pks.length;const dist=levenshtein(t,p);const whole=p.length?1-(dist/Math.max(p.length,1)):0;return Math.max(overlap*.8+whole*.2,whole*.7)}
 function resolveModuleKey(text){
   const t = normalize(text);
-  if (/\b(1|one)\b/.test(t)) return "module 1";
-  if (/\b(2|two)\b/.test(t)) return "module 2";
+  if (/\b(erp)?\s*(module)?\s*(1|one)\b/.test(t)) return "module 1";
+  if (/\b(erp)?\s*(module)?\s*(2|two)\b/.test(t)) return "module 2";
   let best={key:null,score:0};
   for(const key of Object.keys(MODULE_SYNONYMS)){
     const s = MODULE_SYNONYMS[key].reduce((mx,ph)=>Math.max(mx, phraseScore(t, ph)), 0);
@@ -91,8 +91,8 @@ const DS = {
   team:     { keys:["team","meet the team","leadership"], summary:"Meet the Drivestream leadership and team.", url:"https://www.drivestream.com/meet-the-team/" },
   consulting:{ keys:["consulting","oracle cloud consulting"], summary:"Consulting services for Oracle Cloud across ERP and HCM.", url:"https://www.drivestream.com/oracle-cloud-consulting/" },
   subscription:{ keys:["subscription","services subscription"], summary:"Oracle Cloud Services Subscription options and bundles.", url:"https://www.drivestream.com/oracle-cloud-services-subscription/" },
-  erp:      { keys:["erp","oracle cloud erp"], summary:"Oracle Cloud ERP implementations and best practices.", url:"https://www.drivestream.com/oracle-cloud-erp/" },
-  hcm:      { keys:["hcm","human capital management","oracle cloud hcm"], summary:"Oracle Cloud HCM solutions for the full employee lifecycle.", url:"https://www.drivestream.com/oracle-cloud-hcm/" },
+  erp:      { keys:["oracle cloud erp","erp"], summary:"Oracle Cloud ERP implementations and best practices.", url:"https://www.drivestream.com/oracle-cloud-erp/" },
+  hcm:      { keys:["oracle cloud hcm","hcm","human capital management"], summary:"Oracle Cloud HCM solutions for the full employee lifecycle.", url:"https://www.drivestream.com/oracle-cloud-hcm/" },
   payroll:  { keys:["payroll"], summary:"Payroll with Oracle Cloud HCM.", url:"https://www.drivestream.com/oracle-cloud-hcm-payroll/" },
   advisory: { keys:["strategy","advisory","strategy and advisory"], summary:"Strategy & Advisory for your cloud journey.", url:"https://www.drivestream.com/strategy-and-advisory/" },
   ams:      { keys:["ams","managed services","application management"], summary:"Application Managed Services (AMS) for Oracle Cloud.", url:"https://www.drivestream.com/ams/" },
@@ -125,7 +125,7 @@ let youTubeReady;
   wait();
 }
 
-/* ---------- Overlay (video inside portrait) ---------- */
+/* ---------- Overlay video ---------- */
 let ytPlayer = null;
 function hideOverlay({resetBg=true}={}) {
   overlayFrame.src = "about:blank";
@@ -146,9 +146,8 @@ async function showModuleInFrame(modKey){
   if (m.type === "synthesia") {
     overlayFrame.classList.add("show");
     ytContainer.classList.remove("show");
-    overlayFrame.src = m.url; // autoplay muted per policy
-    overlayToggle.style.display = "none"; // cannot control Synthesia cross-origin
-    // Fallback auto-close after 2 minutes
+    overlayFrame.src = m.url;               // muted autoplay
+    overlayToggle.style.display = "none";   // cannot control Synthesia cross-origin
     setTimeout(()=>{ if (overlay.style.display!=="none") { hideOverlay(); speakNext("The video has finished. What would you like next?"); }}, 120000);
     return true;
   }
@@ -169,7 +168,6 @@ async function showModuleInFrame(modKey){
         }
       }
     });
-    // Show Play/Pause button for YouTube
     overlayToggle.style.display = "inline-block";
     overlayToggle.textContent = "⏸ Pause";
     overlayToggle.onclick = ()=>{
@@ -187,21 +185,66 @@ closeOverlayBtn.addEventListener("click", ()=>{
   speakNext("Closed the video. What would you like to do next?");
 });
 
-/* ---------- Voice: always-on after first gesture ---------- */
-let rec, listening = false, autoRestart = true;
-function startMic() {
+/* ---------- Voice: robust start + auto-restart + status chip ---------- */
+let rec, recSupported, listening=false, autoRestart=true;
+(function detectSR(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showError("Voice input not supported in this browser. Try Chrome."); return; }
+  recSupported = !!SR;
+})();
+
+function setMicUI(on, label){
+  micChip.classList.toggle("listening", !!on);
+  micLabel.textContent = label || (on ? "listening…" : "voice off");
+}
+
+function startMic() {
+  if (!recSupported) {
+    setMicUI(false, "voice not supported (use Chrome)");
+    showError("Voice input not supported in this browser. Please use Chrome.");
+    return;
+  }
   if (rec) return;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   rec = new SR();
-  rec.lang = "en-US"; rec.interimResults = false; rec.continuous = true; rec.maxAlternatives = 1;
+  rec.lang = "en-US";
+  rec.interimResults = false;
+  rec.continuous = true;
+  rec.maxAlternatives = 1;
+
+  rec.onstart = ()=> setMicUI(true, "listening…");
+  rec.onaudiostart = ()=> setMicUI(true, "listening…");
+  rec.onsoundstart = ()=> setMicUI(true, "listening…");
+  rec.onspeechstart = ()=> setMicUI(true, "listening…");
+
   rec.onresult = (ev) => {
     const t = ev.results?.[ev.results.length - 1]?.[0]?.transcript;
-    if (t) { inputEl.value = t; askForm.requestSubmit(); }
+    if (!t) return;
+    console.log("🗣 heard:", t);
+    inputEl.value = t;
+    askForm.requestSubmit();
   };
-  rec.onend = () => { listening = false; if (autoRestart) { try { rec.start(); listening = true; } catch{} } };
-  rec.onerror = () => { listening = false; };
-  try { rec.start(); listening = true; } catch {}
+
+  rec.onspeechend = ()=> setMicUI(true, "processing…");
+  rec.onsoundend  = ()=> setMicUI(true, "processing…");
+  rec.onaudioend  = ()=> setMicUI(true, "processing…");
+
+  rec.onerror = (e)=> {
+    console.warn("Speech error:", e?.error);
+    setMicUI(false, "voice paused");
+    listening = false;
+  };
+
+  rec.onend = () => {
+    setMicUI(false, "restarting…");
+    listening = false;
+    if (autoRestart) {
+      // Restart after a short delay (Chrome sometimes ends after silence)
+      setTimeout(()=> { try { rec.start(); listening = true; setMicUI(true, "listening…"); } catch{} }, 300);
+    }
+  };
+
+  try { rec.start(); listening = true; setMicUI(true, "listening…"); } catch(e) { console.warn(e); }
 }
 
 /* ---------- Chroma-key + cover fit ---------- */
@@ -240,7 +283,7 @@ function speak(text, task=TaskType.REPEAT){ return avatar.speak({ sessionId: sid
 async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catch(e){ showError("Speak failed: "+(e?.message||e)); } }
 
 (async () => {
-  applyBg("DEFAULT"); // default background at start
+  resetToDefault();
 
   let token; try { token = await getToken(); } catch(e){ showError(e.message); return; }
   avatar = new StreamingAvatar({ token });
@@ -250,7 +293,7 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
     if (!stream) { showError("Stream ready, but no MediaStream provided."); return; }
     avatarVideo.srcObject = stream;
     avatarVideo.muted = true;                // unmute after Start
-    startBtn.classList.remove("hidden");     // <-- now visible
+    startBtn.classList.remove("hidden");
     startBtn.textContent = "▶ Start";
     avatarVideo.onloadedmetadata = () => startChromaKeyRendering();
   });
@@ -273,30 +316,31 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
     sid = session?.session_id;
   } catch(e){ showError("Failed to start avatar session. "+(e?.message||e)); return; }
 
-  // Greeting (may be muted until user hits Start)
+  // Greeting (muted until Start is clicked)
   await speakNext("Hi there! How are you? I hope you're doing good.");
   await sleep(400);
   await speakNext("What is your name, and where are you studying?");
 
-  // ▶ / ⏸ button toggles audio; on first unmute we confirm with voice + start mic
+  // Start button: unmute + mic + small confirmation
   let hasWelcomedAudio = false;
   startBtn.addEventListener("click", ()=>{
     if (avatarVideo.muted) {
       avatarVideo.muted = false;
       startBtn.textContent = "⏸ Sound";
-      startMic();
+      startMic(); // <-- begins listening, auto-restarts on silence
       if (!hasWelcomedAudio) { hasWelcomedAudio = true; speakNext("Audio enabled. You can speak or type your question."); }
     } else {
       avatarVideo.muted = true;
       startBtn.textContent = "▶ Sound";
+      setMicUI(false, "voice off");
     }
   });
 
-  // ERP menu
+  // ERP menu buttons
   document.getElementById("opt1").addEventListener("click", ()=> askToPlay("module 1"));
   document.getElementById("opt2").addEventListener("click", ()=> askToPlay("module 2"));
 
-  // Drivestream menu
+  // Drivestream menu buttons
   Array.from(menuDS.querySelectorAll("button[data-ds]")).forEach(btn=>{
     btn.addEventListener("click", ()=> handleDSTopic(btn.dataset.ds));
   });
@@ -309,6 +353,7 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
 
     hideError(); confirmBar.classList.add("hidden");
 
+    // University → change background silently, then speak & show menus
     const uniBg = detectUniversity(txt);
     if (uniBg) {
       applyBg(uniBg);
@@ -317,12 +362,15 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
       showMenus(); return;
     }
 
+    // ERP module (voice or text)
     const modKey = resolveModuleKey(txt);
     if (modKey) { await askToPlay(modKey); return; }
 
+    // Drivestream topic (voice or text)
     const dsKey = resolveDSTopic(txt);
     if (dsKey) { await handleDSTopic(dsKey); return; }
 
+    // General Q&A fallback
     try { await speak(txt, TaskType.TALK); }
     catch { await speakNext("There isn’t enough information for that. Try asking about Drivestream or ERP Module 1/2."); }
   });
@@ -332,7 +380,6 @@ async function speakNext(text){ try { await speak(text, TaskType.REPEAT); } catc
 function showMenus(){ menuERP.classList.remove("hidden"); menuDS.classList.remove("hidden"); }
 function hideMenus(){ menuERP.classList.add("hidden"); menuDS.classList.add("hidden"); }
 
-/* Module flow: summary → ask to play → (yes/no) → in-frame video */
 async function askToPlay(modKey){
   hideMenus(); hideOverlay({resetBg:false});
   const notes = modKey==="module 1"
@@ -350,13 +397,14 @@ async function askToPlay(modKey){
   confirmNo.onclick  = async ()=>{
     confirmBar.classList.add("hidden");
     await speakNext("Okay, I’ll skip the video. What would you like next?");
+    showMenus();
   };
 }
 
-/* Drivestream flow */
 async function handleDSTopic(dsKey){
   hideMenus(); hideOverlay();
-  const t = DS[dsKey]; if (!t) { await speakNext("There isn’t enough information for that."); return; }
+  const t = DS[dsKey];
+  if (!t) { await speakNext("There isn’t enough information for that."); return; }
   await speakNext(`${t.summary} You can learn more here: ${t.url}`);
   await speakNext("Would you like to hear about ERP training as well, or explore another Drivestream topic?");
   showMenus();
