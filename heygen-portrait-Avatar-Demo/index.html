@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Avatar Gen — Server</title>
+    <link rel="stylesheet" href="./css/styles.css"/>
+  </head>
+  <body>
+    <div class="app-frame">
+      <div class="header">
+        <div class="brand">
+          <div class="dot"></div>
+          <h1>Avatar Gen</h1>
+        </div>
+        <div class="links" id="links"></div>
+      </div>
+      <div id="stage" class="stage"></div>
+      <div class="controls">
+        <div class="row">
+          <button class="button primary" id="btn-start">Start</button>
+          <button class="button" id="btn-pause" disabled>Pause</button>
+          <button class="button ghost" id="btn-stop" disabled>Stop</button>
+        </div>
+        <div class="row">
+          <div id="status" class="status">Ready</div>
+        </div>
+      </div>
+      <div class="modal" id="idle-modal" role="dialog" aria-modal="true">
+        <div class="sheet">
+          <h3>Still there?</h3>
+          <p>Your session will stop to save credits in 10s.</p>
+          <div style="display:flex; gap:8px; justify-content:flex-end">
+            <button class="button" id="idle-end">Stop</button>
+            <button class="button primary" id="idle-stay">Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>
